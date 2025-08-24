@@ -1,143 +1,139 @@
-from flask import Flask, render_template, request, jsonify
-import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from flask import Flask, render_template, request, jsonify, abort
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 
 app = Flask(__name__)
 
-# Data file path
-DATA_FILE = 'todos.json'
+# Database configuration: default to SQLite, override with DATABASE_URL
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///todos.db")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-def load_todos():
-    """Load todos from JSON file"""
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
-    return []
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
-def save_todos(todos):
-    """Save todos to JSON file"""
-    with open(DATA_FILE, 'w') as f:
-        json.dump(todos, f, indent=2)
 
-def get_next_id(todos):
-    """Get the next available ID"""
-    if not todos:
-        return 1
-    return max(todo['id'] for todo in todos) + 1
+class Todo(db.Model):
+    __tablename__ = "todos"
 
-@app.route('/')
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(500), nullable=False)
+    completed = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    priority = db.Column(db.String(10), nullable=False, default="medium", index=True)  # low|medium|high
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "text": self.title,  # Use "text" for backward compatibility with frontend
+            "title": self.title,  # Also include "title" for new API consumers
+            "completed": self.completed,
+            "priority": self.priority,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+@app.route("/")
 def index():
-    """Serve the main page"""
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/api/todos', methods=['GET'])
-def get_todos():
-    """Get all todos"""
-    todos = load_todos()
-    return jsonify(todos)
 
-@app.route('/api/todos', methods=['POST'])
-def create_todo():
-    """Create a new todo"""
-    data = request.get_json()
-    
-    if not data or not data.get('text', '').strip():
-        return jsonify({'error': 'Todo text is required'}), 400
-    
-    todos = load_todos()
-    
-    new_todo = {
-        'id': get_next_id(todos),
-        'text': data['text'].strip(),
-        'completed': False,
-        'priority': data.get('priority', 'medium'),
-        'created_at': datetime.now().isoformat()
-    }
-    
-    todos.append(new_todo)
-    save_todos(todos)
-    
-    return jsonify(new_todo), 201
+@app.get("/api/todos")
+def api_list():
+    todos = Todo.query.order_by(Todo.created_at.desc(), Todo.id.desc()).all()
+    return jsonify([t.to_dict() for t in todos])
 
-@app.route('/api/todos/<int:todo_id>', methods=['PUT'])
-def update_todo(todo_id):
-    """Update a todo"""
-    data = request.get_json()
-    todos = load_todos()
-    
-    todo = next((t for t in todos if t['id'] == todo_id), None)
+
+@app.post("/api/todos")
+def api_create():
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or data.get("text") or "").strip()
+    priority = (data.get("priority") or "medium").strip().lower()
+
+    if not title:
+        return jsonify({"error": "Title is required"}), 400
+
+    if priority not in {"low", "medium", "high"}:
+        return jsonify({"error": "Priority must be one of: low, medium, high"}), 400
+
+    todo = Todo(title=title, completed=False, priority=priority)
+    db.session.add(todo)
+    db.session.commit()
+    return jsonify(todo.to_dict()), 201
+
+
+@app.put("/api/todos/<int:todo_id>")
+def api_update(todo_id):
+    data = request.get_json(silent=True) or {}
+    todo = Todo.query.get(todo_id)
     if not todo:
-        return jsonify({'error': 'Todo not found'}), 404
-    
-    # Update fields if provided
-    if 'text' in data:
-        if not data['text'].strip():
-            return jsonify({'error': 'Todo text cannot be empty'}), 400
-        todo['text'] = data['text'].strip()
-    
-    if 'completed' in data:
-        todo['completed'] = bool(data['completed'])
-    
-    if 'priority' in data:
-        if data['priority'] in ['low', 'medium', 'high']:
-            todo['priority'] = data['priority']
-    
-    todo['updated_at'] = datetime.now().isoformat()
-    
-    save_todos(todos)
-    return jsonify(todo)
+        abort(404)
 
-@app.route('/api/todos/<int:todo_id>', methods=['DELETE'])
-def delete_todo(todo_id):
-    """Delete a todo"""
-    todos = load_todos()
-    
-    todo_index = next((i for i, t in enumerate(todos) if t['id'] == todo_id), None)
-    if todo_index is None:
-        return jsonify({'error': 'Todo not found'}), 404
-    
-    deleted_todo = todos.pop(todo_index)
-    save_todos(todos)
-    
-    return jsonify({'message': 'Todo deleted successfully', 'todo': deleted_todo})
+    if "title" in data or "text" in data:
+        new_title = (data.get("title") or data.get("text") or "").strip()
+        if not new_title:
+            return jsonify({"error": "Title cannot be empty"}), 400
+        todo.title = new_title
 
-@app.route('/api/todos/clear-completed', methods=['POST'])
+    if "completed" in data:
+        todo.completed = bool(data["completed"])
+
+    if "priority" in data:
+        new_priority = str(data["priority"]).strip().lower()
+        if new_priority not in {"low", "medium", "high"}:
+            return jsonify({"error": "Priority must be one of: low, medium, high"}), 400
+        todo.priority = new_priority
+
+    todo.updated_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return jsonify(todo.to_dict())
+
+
+@app.delete("/api/todos/<int:todo_id>")
+def api_delete(todo_id):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        abort(404)
+
+    db.session.delete(todo)
+    db.session.commit()
+    return "", 204
+
+
+@app.post("/api/todos/clear-completed")
 def clear_completed():
-    """Clear all completed todos"""
-    todos = load_todos()
-    initial_count = len(todos)
-    
-    todos = [todo for todo in todos if not todo['completed']]
-    save_todos(todos)
-    
-    cleared_count = initial_count - len(todos)
-    return jsonify({'message': f'{cleared_count} completed todos cleared'})
+    deleted = Todo.query.filter_by(completed=True).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({"message": f"Cleared {deleted} completed todos.", "deleted": deleted})
 
-@app.route('/api/todos/stats', methods=['GET'])
+
+@app.get("/api/todos/stats")
 def get_stats():
-    """Get todo statistics"""
-    todos = load_todos()
-    
-    total = len(todos)
-    completed = len([t for t in todos if t['completed']])
+    total = db.session.query(db.func.count(Todo.id)).scalar() or 0
+    completed = db.session.query(db.func.count(Todo.id)).filter(Todo.completed.is_(True)).scalar() or 0
     active = total - completed
-    
-    priority_counts = {
-        'high': len([t for t in todos if t['priority'] == 'high']),
-        'medium': len([t for t in todos if t['priority'] == 'medium']),
-        'low': len([t for t in todos if t['priority'] == 'low'])
-    }
-    
-    return jsonify({
-        'total': total,
-        'completed': completed,
-        'active': active,
-        'priority_counts': priority_counts
-    })
 
-if __name__ == '__main__':
+    priority_counts = dict.fromkeys(["low", "medium", "high"], 0)
+    rows = (
+        db.session.query(Todo.priority, db.func.count(Todo.id))
+        .group_by(Todo.priority)
+        .all()
+    )
+    for p, c in rows:
+        if p in priority_counts:
+            priority_counts[p] = c
+
+    return jsonify(
+        {
+            "total": total,
+            "completed": completed,
+            "active": active,
+            "priority_counts": priority_counts,
+        }
+    )
+
+if __name__ == "__main__":
     app.run(debug=True)
