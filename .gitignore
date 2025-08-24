@@ -65,6 +65,13 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# Database files
+todos.db
+*.db
+
+# Flask-Migrate
+migrations/
+
 # Scrapy stuff:
 .scrapy
 
