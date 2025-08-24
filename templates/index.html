@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Todo List</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Section -->
+        <header class="app-header">
+            <h1 class="app-title">
+                <i class="fas fa-tasks"></i>
+                Todo List
+            </h1>
+            <div class="stats-container">
+                <div class="stat-item">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="total-count">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Active</span>
+                    <span class="stat-value" id="active-count">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Completed</span>
+                    <span class="stat-value" id="completed-count">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Add Todo Section -->
+        <section class="add-todo-section">
+            <form id="add-todo-form" class="add-todo-form">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="todo-input" 
+                        class="todo-input" 
+                        placeholder="Add a new todo..."
+                        maxlength="200"
+                        required
+                    >
+                    <select id="priority-select" class="priority-select">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                    <button type="submit" class="add-btn">
+                        <i class="fas fa-plus"></i>
+                        Add
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Filter Section -->
+        <section class="filter-section">
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">
+                    <i class="fas fa-list"></i>
+                    All
+                </button>
+                <button class="filter-btn" data-filter="active">
+                    <i class="fas fa-clock"></i>
+                    Active
+                </button>
+                <button class="filter-btn" data-filter="completed">
+                    <i class="fas fa-check"></i>
+                    Completed
+                </button>
+            </div>
+            <div class="filter-actions">
+                <button id="clear-completed-btn" class="action-btn">
+                    <i class="fas fa-trash"></i>
+                    Clear Completed
+                </button>
+            </div>
+        </section>
+
+        <!-- Todo List Section -->
+        <section class="todo-list-section">
+            <div id="loading-indicator" class="loading-indicator">
+                <div class="spinner"></div>
+                <span>Loading todos...</span>
+            </div>
+            
+            <div id="empty-state" class="empty-state hidden">
+                <div class="empty-icon">
+                    <i class="fas fa-clipboard-list"></i>
+                </div>
+                <h3>No todos yet</h3>
+                <p>Add your first todo above to get started!</p>
+            </div>
+
+            <ul id="todo-list" class="todo-list">
+                <!-- Todos will be dynamically inserted here -->
+            </ul>
+        </section>
+
+        <!-- Edit Modal -->
+        <div id="edit-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Edit Todo</h3>
+                    <button class="close-modal" id="close-edit-modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form id="edit-todo-form">
+                    <div class="form-group">
+                        <label for="edit-todo-text">Todo Text</label>
+                        <input 
+                            type="text" 
+                            id="edit-todo-text" 
+                            class="todo-input" 
+                            maxlength="200"
+                            required
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-priority-select">Priority</label>
+                        <select id="edit-priority-select" class="priority-select">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-edit">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Notification Container -->
+        <div id="notification-container" class="notification-container">
+            <!-- Notifications will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

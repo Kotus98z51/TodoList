@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "text": "Complete the modern Todo List redesign",
+    "completed": false,
+    "priority": "high",
+    "created_at": "2025-08-24T09:43:01.792283"
+  },
+  {
+    "id": 3,
+    "text": "Organize desk and workspace",
+    "completed": false,
+    "priority": "low",
+    "created_at": "2025-08-24T09:43:27.718556"
+  }
+]
