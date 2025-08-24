@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from sqlalchemy import inspect
 
 app = Flask(__name__)
 
@@ -34,6 +35,16 @@ class Todo(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+# Auto-create database tables if they don't exist (for dev convenience)
+with app.app_context():
+    auto = str(os.getenv("AUTO_CREATE_DB", "1")).lower() not in {"0", "false", "no"}
+    if auto:
+        insp = inspect(db.engine)
+        tables = set(insp.get_table_names())
+        if "todos" not in tables:
+            db.create_all()
 
 
 @app.route("/")
